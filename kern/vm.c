@@ -145,6 +145,8 @@ vm_test()
     char* p = kalloc();
     memset(p, 0, PGSIZE);
     map_region((uint64_t*)p, (void*)0x1000, PGSIZE, 0, 0);
+
+    //V2P beacuse ttbr0_el1 must hold physical address of page table
     asm volatile("msr ttbr0_el1, %[x]": : [x] "r"(V2P(p)));
 
     if (*((int64_t*)0x1000) == 0xac) {
