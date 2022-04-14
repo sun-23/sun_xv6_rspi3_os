@@ -8,6 +8,15 @@
 #include "timer.h"
 #include "spinlock.h"
 
+struct do_once
+{
+    int count;
+    struct spinlock lock;
+};
+
+struct do_once alloc_once = {0};
+struct do_once bss_clear = {0};
+
 void
 main()
 {
@@ -24,16 +33,25 @@ main()
      * called once, and use lock to guarantee this.
      */
     /* TODO: Your code here. */
-
-    /* TODO: Use `memset` to clear the BSS section of our program. */
-    memset(edata, 0, end - edata);    
+    acquire(&bss_clear.lock);
+    if (!bss_clear.count) {
+        bss_clear.count = 1;
+        /* TODO: Use `memset` to clear the BSS section of our program. */
+        memset(edata, 0, end - edata); 
+    }
+    release(&bss_clear.lock);
+   
     /* TODO: Use `cprintf` to print "hello, world\n" */
     console_init();
-    alloc_init();
-    cprintf("Allocator: Init success.\n");
-    check_free_list();
-    // vm_test();
 
+    acquire(&alloc_once.lock);
+    if (!alloc_once.count) {
+        alloc_once.count = 1;
+        alloc_init();
+        // check_free_list();
+        cprintf("Allocator: Init success.\n");
+    }
+    release(&alloc_once.lock);
     irq_init();
 
     lvbar(vectors);
