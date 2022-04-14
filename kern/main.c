@@ -2,6 +2,7 @@
 
 #include "string.h"
 #include "console.h"
+#include "kalloc.h"
 
 void
 main()
@@ -14,10 +15,11 @@ main()
     extern char edata[], end[];
 
     /* TODO: Use `memset` to clear the BSS section of our program. */
-    memset(edata, 0, end-edata);
-
+    memset(edata, 0, end - edata);    
     /* TODO: Use `cprintf` to print "hello, world\n" */
-    cprintf("Hello, world!\n");
-
+    console_init();
+    alloc_init();
+    cprintf("Allocator: Init success.\n");
+    check_free_list();
     while (1) ;
 }
