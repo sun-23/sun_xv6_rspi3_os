@@ -25,6 +25,7 @@ struct {
 void
 alloc_init()
 {
+    initlock(&kmem.lock, "kmem_lock");
     free_range(end, P2V(PHYSTOP));
 }
 

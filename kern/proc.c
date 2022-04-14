@@ -9,14 +9,30 @@
 
 struct {
     struct proc proc[NPROC];
+    struct spinlock lock;
 } ptable;
 
 static struct proc *initproc;
 
-int nextpid = 1;
+// int nextpid = 1;
+struct {
+    int nextpid;
+    struct spinlock lock;
+} nextpid = { 1 };
+
 void forkret();
 extern void trapret();
 void swtch(struct context **, struct context *);
+
+int
+alloc_pid()
+{
+    acquire(&nextpid.lock);
+    int pid = nextpid.nextpid;
+    nextpid.nextpid++;
+    release(&nextpid.lock);
+    return pid;
+}
 
 /*
  * Initialize the spinlock for ptable to serialize the access to ptable
@@ -25,6 +41,8 @@ void
 proc_init()
 {
     /* TODO: Your code here. */
+    initlock(&ptable.lock, "proc table");
+    initlock(&nextpid.lock, "nextpid");
 }
 
 /*
@@ -38,6 +56,47 @@ proc_alloc()
 {
     struct proc *p;
     /* TODO: Your code here. */
+    int found = 0;
+    acquire(&ptable.lock);
+    for (p = ptable.proc;p < ptable.proc + NPROC;p++) {
+        if (p->state == UNUSED) {
+            found = 1;
+            break;
+        }
+    }
+    if (found == 0) {
+        release(&ptable.lock);
+        return NULL;
+    }
+
+    // kstack
+    char* sp = kalloc();
+    if (sp == NULL) {
+        panic("proc_alloc: cannot alloc kstack");
+    }
+    p->kstack = sp;
+    sp += KSTACKSIZE;
+    // trapframe
+    sp -= sizeof(*(p->tf));
+    p->tf = (struct trapframe*)sp;
+    memset(p->tf, 0, sizeof(*(p->tf)));
+    // trapret
+    sp -= 8;
+    *(uint64_t*)sp = (uint64_t)trapret;
+    // sp
+    sp -= 8;
+    *(uint64_t*)sp = (uint64_t)p->kstack + KSTACKSIZE;
+    // context
+    sp -= sizeof(*(p->context));
+    p->context = (struct context*)sp;
+    memset(p->context, 0, sizeof(*(p->context)));
+    p->context->x30 = (uint64_t)forkret + 8;
+
+    // other settings
+    p->pid = alloc_pid();
+    p->state = EMBRYO;
+
+    release(&ptable.lock);
 
     return p;
 }
@@ -56,6 +115,28 @@ user_init()
     extern char _binary_obj_user_initcode_start[], _binary_obj_user_initcode_size[];
     
     /* TODO: Your code here. */
+    p = proc_alloc();
+
+    if (p == NULL) {
+        panic("user_init: cannot allocate a process");
+    }
+    if ((p->pgdir = pgdir_init()) == NULL) {
+        panic("user_init: cannot allocate a pagetable");
+    }
+
+    initproc = p;
+
+    uvm_init(p->pgdir, _binary_obj_user_initcode_start, (long)_binary_obj_user_initcode_size);
+
+    // tf
+    memset(p->tf, 0, sizeof(*(p->tf)));
+    p->tf->SPSR_EL1 = 0;
+    p->tf->SP_EL0 = PGSIZE;
+    p->tf->x30 = 0;
+    p->tf->ELR_EL1 = 0;
+
+    p->state = RUNNABLE;
+    p->sz = PGSIZE;
 }
 
 /*
@@ -77,6 +158,21 @@ scheduler()
     for (;;) {
         /* Loop over process table looking for process to run. */
         /* TODO: Your code here. */
+        acquire(&ptable.lock);
+        for (p = ptable.proc; p < ptable.proc + NPROC; p++) {
+            if (p->state == RUNNABLE) {
+                uvm_switch(p);
+                c->proc = p;
+                p->state = RUNNING;
+                cprintf("scheduler: process id %d takes the cpu %d\n", p->pid, cpuid());
+                swtch(&c->scheduler, p->context);
+
+                // back
+                c->proc = NULL;
+            }
+
+        }
+        release(&ptable.lock);
     }
 }
 
@@ -87,6 +183,16 @@ void
 sched()
 {
     /* TODO: Your code here. */
+    struct proc* p = thiscpu->proc;
+    if (!holding(&ptable.lock)) {
+        panic("sched: not holding ptable lock");
+    }
+
+    if (p->state == RUNNING) {
+        panic("sched: process running");
+    }
+
+    swtch(&p->context, thiscpu->scheduler);
 }
 
 /*
@@ -96,6 +202,8 @@ void
 forkret()
 {
     /* TODO: Your code here. */
+    release(&ptable.lock); //release ptable.lok that is aquired in scheduler
+    return;
 }
 
 /*
@@ -108,4 +216,21 @@ exit()
 {
     struct proc *p = thiscpu->proc;
     /* TODO: Your code here. */
+    acquire(&ptable.lock);
+    p->state = ZOMBIE;
+    sched();
+
+    // never exit
+    panic("exit: shall not return");
+}
+
+void
+yield()
+{
+    acquire(&ptable.lock);
+    struct proc* p = thiscpu->proc;
+    p->state = RUNNABLE;
+    cprintf("yield: process id %d gives up the cpu %d\n", p->pid, cpuid());
+    sched();
+    release(&ptable.lock);
 }

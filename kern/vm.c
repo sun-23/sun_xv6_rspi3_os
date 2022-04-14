@@ -165,6 +165,12 @@ uint64_t *
 pgdir_init()
 {
     /* TODO: Your code here. */
+    uint64_t* ret = (uint64_t*)kalloc();
+    if (ret == NULL) {
+        panic("pgdir_init: unable to allocate a page table");
+    }
+    memset(ret, 0, PGSIZE);
+    return ret;
 }
 
 /* 
@@ -177,6 +183,21 @@ void
 uvm_init(uint64_t *pgdir, char *binary, int sz)
 {
     /* TODO: Your code here. */
+    if (sz >= PGSIZE) {
+        panic("uvm_init: init process too big");
+    }
+    //kalloc return virtual address
+    char* r = kalloc();
+    if (r == NULL) {
+        panic("uvm_init: cannot alloc a page");
+    }
+    memset(r, 0, PGSIZE);
+    //V2P to physical address 
+    //map_region require pa with physical address
+    map_region(pgdir, (void*)0, PGSIZE, V2P(r), PTE_USER | PTE_RW | PTE_PAGE);
+    //move binary data to r(va)->V2P(r) (entry.c maps linear and va);
+    //data in r(va) and V2P(r) and 0(va) must same;
+    memmove(r, (void*)binary, sz);
 }
 
 /*
@@ -186,4 +207,9 @@ void
 uvm_switch(struct proc *p)
 {
     /* TODO: Your code here. */
+    if (p->pgdir == NULL) {
+        panic("uvm_switch: pgdir is null pointer");
+    }
+    //V2P beacuse ttbr0_el1 must hold physical address of page table
+    lttbr0(V2P(p->pgdir));
 }

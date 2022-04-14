@@ -17,8 +17,9 @@ struct do_once
     struct spinlock lock;
 };
 
-struct do_once alloc_once = {0};
-struct do_once bss_clear = {0};
+struct do_once alloc_once = { 0 };
+struct do_once bss_clear = { 0 };
+struct do_once initproc_once = { 0 };
 
 void
 main()
@@ -46,6 +47,7 @@ main()
    
     /* TODO: Use `cprintf` to print "hello, world\n" */
     console_init();
+    cprintf("main: [CPU%d] is init kernel\n", cpuid());
 
     acquire(&alloc_once.lock);
     if (!alloc_once.count) {
@@ -55,9 +57,18 @@ main()
         cprintf("Allocator: Init success.\n");
     }
     release(&alloc_once.lock);
+
     irq_init();
-    proc_init();
-    user_init();
+
+    acquire(&initproc_once.lock);
+    if (!initproc_once.count) {
+        initproc_once.count = 1;
+        proc_init();
+        user_init();
+        user_init();
+        user_init();
+    }
+    release(&initproc_once.lock);
 
     lvbar(vectors);
     timer_init();

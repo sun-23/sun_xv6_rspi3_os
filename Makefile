@@ -111,11 +111,7 @@ qemu-gdb: $(KERN_IMG)
 	$(QEMU) -kernel $< -S -gdb tcp::1234
 
 gdb: 
-<<<<<<< HEAD
-	gdb-multiarch -x .gdbinit
-=======
 	gdb-multiarch -n -x .gdbinit
->>>>>>> origin/lab5
 
 clean:
 	rm -r $(BUILD_DIR)

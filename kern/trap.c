@@ -26,7 +26,7 @@ trap(struct trapframe *tf)
 {
     struct proc *proc = thiscpu->proc;
     int src = get32(IRQ_SRC_CORE(cpuid()));
-    if (src & IRQ_CNTPNSIRQ) timer(), timer_reset();
+    if (src & IRQ_CNTPNSIRQ) timer(), timer_reset(), yield();
     else if (src & IRQ_TIMER) clock(), clock_reset();
     else if (src & IRQ_GPU) {
         if (get32(IRQ_PENDING_1) & AUX_INT) uart_intr();
@@ -37,6 +37,8 @@ trap(struct trapframe *tf)
             lesr(0);  /* Clear esr. */
             /* Jump to syscall to handle the system call from user process */
             /* TODO: Your code here. */
+            proc->tf = tf;
+            syscall();
             break;
         default:
 bad:

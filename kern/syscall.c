@@ -1,6 +1,7 @@
 #include "string.h"
 #include "proc.h"
 #include "syscall.h"
+#include "syscallno.h"
 #include "console.h"
 
 /* 
@@ -63,7 +64,7 @@ argint(int n, uint64_t *ip)
 
     struct proc *proc = thiscpu->proc;
 
-    *ip = *(&proc->tf->r1 + n);
+    *ip = *(&proc->tf->x1 + n);
 
     return 0;
 }
@@ -123,18 +124,14 @@ int
 syscall()
 {
     struct proc *proc = thiscpu->proc;
-    /*
-     * Determine the cause and then jump to the corresponding handle
-     * the handler may look like
-     * switch (syscall number) {
-     *      SYS_XXX:
-     *          return sys_XXX();
-     *      SYS_YYY:
-     *          return sys_YYY();
-     *      default:
-     *          panic("syscall: unknown syscall %d\n", syscall number)
-     * }
-     */
-    /* TODO: Your code here. */
+    int syscall_number = proc->tf->x0;
+    switch (syscall_number) {
+        case SYS_exec:
+            return sys_exec();
+        case SYS_exit:
+            return sys_exit();
+        default:
+            panic("syscall: unknown syscall %d\n", syscall_number);
+    }
     return 0;
 }

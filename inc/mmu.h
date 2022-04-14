@@ -41,8 +41,7 @@
 #define PTE_RO       (1<<7)      /* read-only */
 #define PTE_SH       (3<<8)      /* Shareability */
 #define PTE_AF       (1<<10)     /* P2066 access flags */
-// Address in page table or page directory entry
-// get address to next-lavel table
+/* Get address to next-lavel table */
 /* Address in page table or page directory entry */
 #define PTE_ADDR(pte)   ((uint64_t)(pte) & ~0xFFF)
 #define PTE_FLAGS(pte)  ((unsigned)(pte) &  0xFFF)
