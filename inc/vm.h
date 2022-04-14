@@ -1,9 +1,14 @@
 #ifndef KERN_VM_H
 #define KERN_VM_H
 
-#include "memlayout.h"
+#include <stdint.h>
+#include "proc.h"
 
 void vm_free(uint64_t *, int);
 void vm_test();
+void uvm_switch(struct proc *);
+void uvm_init(uint64_t *, char *, int);
 
-#endif /* !KERN_VM_H */
+uint64_t *pgdir_init();
+
+#endif

@@ -7,6 +7,9 @@
 #include "trap.h"
 #include "timer.h"
 #include "spinlock.h"
+#include "proc.h"
+
+struct cpu cpus[NCPU];
 
 struct do_once
 {
@@ -53,11 +56,13 @@ main()
     }
     release(&alloc_once.lock);
     irq_init();
+    proc_init();
+    user_init();
 
     lvbar(vectors);
     timer_init();
 
-    cprintf("CPU %d: Init success.\n", cpuid());
-
+    cprintf("main: [CPU%d] Init success.\n", cpuid());
+    scheduler();
     while (1) ;
 }
