@@ -27,7 +27,7 @@ $(BOOT_IMG): $(KERN_IMG) $(shell find boot/*)
 $(FS_IMG): $(shell find obj/user/bin -type f)
 	echo $^
 	cc $(shell find user/src/mkfs/ -name "*.c") -o obj/mkfs
-	./obj/mkfs $@ $^
+	./obj/mkfs $@ $^ README.md CODING.md Note.md
 
 $(SD_IMG): $(BOOT_IMG) $(FS_IMG)
 	dd if=/dev/zero of=$@ seek=$$(($(SECTORS) - 1)) bs=$(SECTOR_SIZE) count=1
