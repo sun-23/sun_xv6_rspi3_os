@@ -17,7 +17,10 @@ struct buf {
     struct sleeplock lock;
 
     /* TODO: Your code here. */
+    struct buf* qnext;
 
+    struct buf* prev;
+    struct buf* next;
 };
 
 void        binit();

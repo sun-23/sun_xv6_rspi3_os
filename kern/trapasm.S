@@ -42,6 +42,9 @@ alltraps:
      */
 
     /* TODO: Your code here. */
+	mrs x12, TPIDR_EL0
+	stp x12, x12, [sp, #-16]!
+	str Q0, [sp, #-16]!
 
     /*
      * Call trap(struct *trapframe).
@@ -60,6 +63,11 @@ trapret:
      * Hint: `ldp x1, x2, [sp], #16` is equivalent to first `pop x1`
      * and then `pop x2`.
      */
+
+	/* Restore Q0 and TPIDR_EL0. */
+	ldr Q0, [sp], #16
+	ldp x12, x12, [sp], #16
+	msr	TPIDR_EL0, x12
 
     /* TODO: Your code here. */
     ldp	x23, x22, [sp], #16

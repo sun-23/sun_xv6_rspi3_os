@@ -5,6 +5,13 @@
 #include "console.h"
 
 int
+sys_exit()
+{
+    exit();
+    return 0;
+}
+
+int
 sys_yield()
 {
     yield();
@@ -15,6 +22,15 @@ size_t
 sys_brk()
 {
     /* TODO: Your code here. */
+    size_t addr;
+    uint64_t n;
+
+    if (argint(0, &n) < 0)
+        return -1;
+    addr = thisproc()->sz;
+    if (growproc(n) < 0)
+        return -1;
+    return addr;
 }
 
 int

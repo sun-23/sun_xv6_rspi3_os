@@ -8,6 +8,8 @@
 #include "timer.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sd.h"
+#include "log.h"
 
 struct cpu cpus[NCPU];
 
@@ -65,8 +67,16 @@ main()
         initproc_once.count = 1;
         proc_init();
         user_init();
-        user_init();
-        user_init();
+        user_idle_init();
+        user_idle_init();
+        user_idle_init();
+        user_idle_init();
+
+        sd_init();
+        binit();
+        fileinit();
+
+        cprintf("init the proc successfully\n");
     }
     release(&initproc_once.lock);
 

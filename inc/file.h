@@ -71,4 +71,20 @@ int             filestat(struct file *f, struct stat *st);
 ssize_t         fileread(struct file *f, char *addr, ssize_t n);
 ssize_t         filewrite(struct file *f, char *addr, ssize_t n);
 
+int sys_dup();
+ssize_t sys_read();
+ssize_t sys_write();
+ssize_t sys_writev();
+int sys_close();
+int sys_fstat();
+int sys_fstatat();
+int sys_openat();
+int sys_mkdirat();
+int sys_mknodat();
+int sys_chdir();
+int sys_exec();
+
+int execve(const char *path, char *const argv[], char *const envp[]);
+struct inode*   create(char* path, short type, short major, short minor);
+int dirunlink(struct inode* dp, char* name, uint32_t inum);
 #endif

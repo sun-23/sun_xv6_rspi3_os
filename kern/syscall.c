@@ -2,14 +2,17 @@
 #include "string.h"
 #include "proc.h"
 #include "console.h"
+#include "types.h"
+#include "fs.h"
+#include "file.h"
 
-/* 
+/*
  * User code makes a system call with SVC, system call number in r0.
  * Arguments on the stack, from the user call to the C
  * library system call function.
  */
 
-/* Fetch the int at addr from the current process. */
+ /* Fetch the int at addr from the current process. */
 int
 fetchint(uint64_t addr, int64_t *ip)
 {
@@ -22,7 +25,7 @@ fetchint(uint64_t addr, int64_t *ip)
     return 0;
 }
 
-/* 
+/*
  * Fetch the nul-terminated string at addr from the current process.
  * Doesn't actually copy the string - just sets *pp to point at it.
  * Returns length of string, not including nul.
@@ -49,13 +52,13 @@ fetchstr(uint64_t addr, char **pp)
     return -1;
 }
 
-/* 
+/*
  * Fetch the nth (starting from 0) 32-bit system call argument.
  * In our ABI, r0 contains system call index, r1-r4 contain parameters.
  * now we support system calls with at most 4 parameters.
  */
 int
-argint(int n, uint64_t *ip)
+argint(int n, uint64_t* ip)
 {
     if (n > 3) {
         panic("argint: too many system call parameters\n");
@@ -63,12 +66,12 @@ argint(int n, uint64_t *ip)
 
     struct proc *proc = thiscpu->proc;
 
-    // *ip = *(&proc->tf->x1 + n);
+    *ip = *(&proc->tf->x0 + n);
 
     return 0;
 }
 
-/* 
+/*
  * Fetch the nth word-sized system call argument as a pointer
  * to a block of memory of size n bytes.  Check that the pointer
  * lies within the process address space.
@@ -110,29 +113,62 @@ argstr(int n, char **pp)
     return fetchstr(addr, pp);
 }
 
-extern int sys_exec();
-extern int sys_exit();
-
-/* 
- * in ARM, parameters to main (argc, argv) are passed in r0 and r1
- * do not set the return value if it is SYS_exec (the user program
- * anyway does not expect us to return anything).
- */
-/* syscall handler */
-int
-syscall()
+int sys_gettid()
 {
-    struct proc *proc = thiscpu->proc;
-    int syscall_number = proc->tf->x0;
-    switch (syscall_number) {
-        case SYS_execve:
-            return sys_exec();
-        case SYS_exit:
-            return sys_exit();
-        default:
-            panic("syscall: unknown syscall %d\n", syscall_number);
+    return thisproc()->pid;
+}
+int sys_ioctl()
+{
+    if (thisproc()->tf->x1 == 0x5413) {
+        return 0;
+    } else {
+        panic("toctl unimplemented\n");
     }
     return 0;
+}
+int sys_sigprocmask() { return 0; }
+int sys_default()
+{
+    do
+    {
+        // sys_yield();
+        cprintf("Unexpected syscall #%d\n", thisproc()->tf->x8);
+    } while (0);
+    return 0;
+}
+#define NR_SYSCALL 512
+const int (*syscall_table[NR_SYSCALL])() = {
+    [0 ... NR_SYSCALL - 1] = sys_default,
+    [SYS_set_tid_address] = sys_gettid,
+    [SYS_ioctl] = sys_ioctl,
+    [SYS_gettid] = sys_gettid,
+    [SYS_rt_sigprocmask] = sys_sigprocmask,
+    [SYS_brk] = (const int*)sys_brk,
+    [SYS_execve] = sys_exec,
+    [SYS_sched_yield] = sys_yield,
+    [SYS_clone] = sys_clone,
+    [SYS_wait4] = sys_wait4,
+    [SYS_exit_group] = sys_exit,
+    [SYS_exit] = sys_exit,
+    [SYS_dup] = sys_dup,
+    [SYS_chdir] = sys_chdir,
+    [SYS_fstat] = sys_fstat,
+    [SYS_newfstatat] = sys_fstatat,
+    [SYS_mkdirat] = sys_mkdirat,
+    [SYS_mknodat] = sys_mknodat,
+    [SYS_openat] = sys_openat,
+    [SYS_writev] = sys_writev,
+    [SYS_read] = (const int*)sys_read,
+    [SYS_write] = sys_write,
+    [SYS_close] = sys_close
+};
+int syscall(struct trapframe* tf)
+{
+    // cprintf("syscall #%d\n", thisproc()->tf->x8);
+    thisproc()->tf = tf;
+    int sysno = tf->x8;
+    tf->x0 = syscall_table[sysno]();
+    return tf->x0;
 }
 
 /* TODO: If you want to use musl

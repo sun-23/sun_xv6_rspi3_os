@@ -30,6 +30,12 @@ struct trapframe {
         # you should pop to register aka x2 and write data 
         # from register x2 to XXX_ELX
     */ 
+
+   //support musl
+   __uint128_t Q0;
+    uint64_t TPIDR_EL0;
+    uint64_t TPIDR_EL0_COPY;
+
     uint64_t ELR_EL1; //top
     uint64_t SPSR_EL1;
     uint64_t SP_EL0;

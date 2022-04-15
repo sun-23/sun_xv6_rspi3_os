@@ -6,16 +6,18 @@
 
 # exec(init, argv)
 start:
-    ldr     x1, =init
-    ldr     x2, =argv
-    mov     x0, #SYS_exec
+    ldr     x0, =init
+    ldr     x1, =argv
+    mov     x8, #SYS_execve
     svc     0x00
 
 exit:
-    /* mov     x0, #SYS_exit
-    svc     0x00 */
+    mov     x8, #SYS_exit
+    svc     0x00
     b       exit
 
+loop:
+    b       loop
 # char init[] = "/init\0";
 init:
     .string "/init\0"

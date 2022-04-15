@@ -29,10 +29,11 @@ interrupt(struct trapframe *tf)
     int src = get32(IRQ_SRC_CORE(cpuid()));
     if (src & IRQ_CNTPNSIRQ) {
         timer_reset();
-        timer();
+        // timer(); clear log
+        yield();
     } else if (src & IRQ_TIMER) {
         clock_reset();
-        clock();
+        // clock(); clear log
     } else if (src & IRQ_GPU) {
         int p1 = get32(IRQ_PENDING_1), p2 = get32(IRQ_PENDING_2);
         if (p1 & AUX_INT) {
@@ -52,6 +53,7 @@ trap(struct trapframe *tf)
 {
     int ec = resr() >> EC_SHIFT, iss = resr() & ISS_MASK;
     lesr(0);  /* Clear esr. */
+    uint64_t fault_addr;
     switch (ec) {
     case EC_UNKNOWN:
         interrupt(tf);
@@ -61,12 +63,15 @@ trap(struct trapframe *tf)
         if (iss == 0) {
             /* Jump to syscall to handle the system call from user process */
             /* TODO: Your code here. */
-            syscall();
+            syscall(tf);
         } else {
             cprintf("unexpected svc iss 0x%x\n", iss);
         }
         break;
-        
+    case EC_DABORT:
+        asm("MRS %[r], FAR_EL1": [r] "=r" (fault_addr)::);
+        cprintf("data abort: instruction 0x%x, fault addr 0x%llx\n", tf->ELR_EL1, fault_addr);
+        while (1);
     default:
         panic("trap: unexpected irq.\n");
     }

@@ -16,9 +16,10 @@
 #include "log.h"
 #include "fs.h"
 #include "file.h"
+#include "syscall.h"
 
 struct iovec {
-    void  *iov_base;    /* Starting address. */
+    void* iov_base;    /* Starting address. */
     size_t iov_len;     /* Number of bytes to transfer. */
 };
 
@@ -27,10 +28,10 @@ struct iovec {
  * and return both the descriptor and the corresponding struct file.
  */
 static int
-argfd(int n, int64_t *pfd, struct file **pf)
+argfd(int n, int64_t* pfd, struct file** pf)
 {
     int64_t fd;
-    struct file *f;
+    struct file* f;
 
     if (argint(n, &fd) < 0)
         return -1;
@@ -48,27 +49,59 @@ argfd(int n, int64_t *pfd, struct file **pf)
  * Takes over file reference from caller on success.
  */
 static int
-fdalloc(struct file *f)
+fdalloc(struct file* f)
 {
     /* TODO: Your code here. */
+    int fd;
+
+    for (fd = 0; fd < NOFILE; fd++) {
+        if (thisproc()->ofile[fd] == 0) {//find a not-used fd 
+            thisproc()->ofile[fd] = f;//set it to the corresponding file
+            return fd;
+        }
+    }
+    return -1;
 }
 
 int
 sys_dup()
 {
     /* TODO: Your code here. */
+    struct file* f;
+    int fd;
+
+    if (argfd(0, 0, &f) < 0)
+        return -1;
+    if ((fd = fdalloc(f)) < 0)
+        return -1;
+    filedup(f);
+    return fd;
 }
 
 ssize_t
 sys_read()
 {
     /* TODO: Your code here. */
+    struct file* f;
+    ssize_t n;
+    char* p;
+
+    if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
+        return -1;
+    return fileread(f, p, n);
 }
 
 ssize_t
 sys_write()
 {
     /* TODO: Your code here. */
+    struct file* f;
+    ssize_t n;
+    char* p;
+
+    if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
+        return -1;
+    return filewrite(f, p, n);
 }
 
 
@@ -77,52 +110,61 @@ sys_writev()
 {
     /* TODO: Your code here. */
 
-    /* Example code.
-     *
-     * ```
-     * struct file *f;
-     * int64_t fd, iovcnt;
-     * struct iovec *iov, *p;
-     * if (argfd(0, &fd, &f) < 0 ||
-     *     argint(2, &iovcnt) < 0 ||
-     *     argptr(1, &iov, iovcnt * sizeof(struct iovec)) < 0) {
-     *     return -1;
-     * }
-     *
-     * size_t tot = 0;
-     * for (p = iov; p < iov + iovcnt; p++) {
-     *     // in_user(p, n) checks if va [p, p+n) lies in user address space.
-     *     if (!in_user(p->iov_base, p->iov_len))
-     *          return -1;
-     *     tot += filewrite(f, p->iov_base, p->iov_len);
-     * }
-     * return tot;
-     * ```
-     */
+    struct file* f;
+    int64_t fd, iovcnt;
+    struct iovec* iov, * p;
+    if (argfd(0, &fd, &f) < 0 ||
+        argint(2, &iovcnt) < 0 ||
+        argptr(1, &iov, iovcnt * sizeof(struct iovec)) < 0) {
+        return -1;
+    }
+
+    size_t tot = 0;
+    for (p = iov; p < iov + iovcnt; p++) {
+        tot += filewrite(f, p->iov_base, p->iov_len);
+    }
+    return tot;
 }
 
 int
 sys_close()
 {
     /* TODO: Your code here. */
+    struct file* f;
+    int fd;
+
+    if (argfd(0, &fd, &f) < 0) {
+        return -1;
+    }
+
+    thisproc()->ofile[fd] = 0;
+    fileclose(f);
+
+    return 0;
 }
 
 int
 sys_fstat()
 {
     /* TODO: Your code here. */
+    struct file* f;
+    struct stat* st;
+
+    if (argfd(0, 0, &f) < 0 || argptr(1, (void*)&st, sizeof(*st)) < 0)
+        return -1;
+    return filestat(f, st);
 }
 
 int
 sys_fstatat()
 {
     int64_t dirfd, flags;
-    char *path;
-    struct stat *st;
+    char* path;
+    struct stat* st;
 
     if (argint(0, &dirfd) < 0 ||
         argstr(1, &path) < 0 ||
-        argptr(2, (void *)&st, sizeof(*st)) < 0 ||
+        argptr(2, (void*)&st, sizeof(*st)) < 0 ||
         argint(3, &flags) < 0)
         return -1;
 
@@ -135,7 +177,7 @@ sys_fstatat()
         return -1;
     }
 
-    struct inode *ip;
+    struct inode* ip;
     begin_op();
     if ((ip = namei(path)) == 0) {
         end_op();
@@ -149,19 +191,61 @@ sys_fstatat()
     return 0;
 }
 
-static struct inode *
-create(char *path, short type, short major, short minor)
+struct inode*
+    create(char* path, short type, short major, short minor)
 {
     /* TODO: Your code here. */
+    struct inode* ip, * dp;
+    char name[DIRSIZ];
+    uint32_t off;
+
+    if ((dp = nameiparent(path, name)) == 0)
+        return 0;
+
+    ilock(dp);
+
+    if ((ip = dirlookup(dp, name, &off)) != 0) {
+        iunlockput(dp);
+        ilock(ip);
+        if (type == T_FILE && ip->type == T_FILE)
+            return ip;
+        iunlockput(ip);
+        return 0;
+    }
+
+    if ((ip = ialloc(dp->dev, type)) == 0)
+        panic("create: ialloc");
+
+    ilock(ip);
+    ip->major = major;
+    ip->minor = minor;
+    ip->nlink = 1;
+    iupdate(ip);
+
+    if (type == T_DIR) {  // Create . and .. entries.
+        dp->nlink++;  // for ".."
+        iupdate(dp);
+        // No ip->nlink++ for ".": avoid cyclic ref count.
+        if (dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+            panic("create dots");
+    }
+
+    if (dirlink(dp, name, ip->inum) < 0)
+        panic("create: dirlink");
+
+    iunlockput(dp);
+
+    // cprintf("return ip's major:%d", ip->major);
+    return ip;
 }
 
 int
 sys_openat()
 {
-    char *path;
+    char* path;
     int64_t dirfd, fd, omode;
-    struct file *f;
-    struct inode *ip;
+    struct file* f;
+    struct inode* ip;
 
     if (argint(0, &dirfd) < 0 || argstr(1, &path) < 0 || argint(2, &omode) < 0)
         return -1;
@@ -183,7 +267,8 @@ sys_openat()
             end_op();
             return -1;
         }
-    } else {
+    }
+    else {
         if ((ip = namei(path)) == 0) {
             end_op();
             return -1;
@@ -218,8 +303,8 @@ int
 sys_mkdirat()
 {
     int64_t dirfd, mode;
-    char *path;
-    struct inode *ip;
+    char* path;
+    struct inode* ip;
 
     if (argint(0, &dirfd) < 0 || argstr(1, &path) < 0 || argint(2, &mode) < 0)
         return -1;
@@ -245,10 +330,9 @@ sys_mkdirat()
 int
 sys_mknodat()
 {
-    struct inode *ip;
-    char *path;
+    struct inode* ip;
+    char* path;
     int64_t dirfd, major, minor;
-
     if (argint(0, &dirfd) < 0 || argstr(1, &path) < 0 || argint(2, &major) < 0 || argint(3, &minor))
         return -1;
 
@@ -259,22 +343,21 @@ sys_mknodat()
     cprintf("mknodat: path '%s', major:minor %d:%d\n", path, major, minor);
 
     begin_op();
-    if((ip = create(path, T_DEV, major, minor)) == 0) {
+    if ((ip = create(path, T_DEV, major, minor)) == 0) {
         end_op();
         return -1;
     }
     iunlockput(ip);
     end_op();
+
     return 0;
 }
 
 int
 sys_chdir()
 {
-    char *path;
-    struct inode *ip;
-    struct proc *curproc = thisproc();
-  
+    char* path;
+    struct inode* ip;
     begin_op();
     if (argstr(0, &path) < 0 || (ip = namei(path)) == 0) {
         end_op();
@@ -287,9 +370,9 @@ sys_chdir()
         return -1;
     }
     iunlock(ip);
-    iput(curproc->cwd);
+    iput(thisproc()->cwd);
     end_op();
-    curproc->cwd = ip;
+    thisproc()->cwd = ip;
     return 0;
 }
 
@@ -297,5 +380,38 @@ int
 sys_exec()
 {
     /* TODO: Your code here. */
-}
+    char* path, * argv[64];
+    int i;
+    uint64_t uargv, uarg;
 
+    if (argstr(0, &path) < 0 || argint(1, (long*)&uargv) < 0) {
+
+        return -1;
+    }
+    memset(argv, 0, sizeof(argv));
+    for (i = 0;i <= (1 << 6); i++) {
+
+        if (i == (1 << 6)) // >= 64
+        {
+            return -1;
+        }
+
+        if (fetchint(uargv + 8 * i, (long*)&uarg) < 0)
+        {
+            return -1;
+        }
+
+        if (uarg == 0) {
+            argv[i] = 0;
+            break;
+        }
+
+        if (fetchstr(uarg, &argv[i]) < 0)
+        {
+            return -1;
+        }
+
+    }
+    // cprintf("execve path:%s", path);
+    return execve(path, argv, (char**)0);
+}
